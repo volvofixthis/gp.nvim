@@ -78,7 +78,7 @@ D.prepare_payload = function(messages, model, provider)
 		}
 	end
 
-	if provider == "googleai" then
+	if provider == "googleai" or provider == "googleai_free" then
 		for i, message in ipairs(messages) do
 			if message.role == "system" then
 				messages[i].role = "user"
@@ -258,12 +258,11 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 					end
 				end
 
-				if qt.provider == "googleai" then
+				if qt.provider == "googleai" or qt.provider == "googleai_free" then
 					if line:match('"text":') then
 						content = vim.json.decode("{" .. line .. "}").text
 					end
 				end
-
 
 				if content and type(content) == "string" then
 					qt.response = qt.response .. content
@@ -300,9 +299,19 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 				end
 				local raw_response = qt.raw_response
 				local content = qt.response
-				if qt.provider == 'openai' and content == "" and raw_response:match('choices') and raw_response:match("content") then
+				if
+					qt.provider == "openai"
+					and content == ""
+					and raw_response:match("choices")
+					and raw_response:match("content")
+				then
 					local response = vim.json.decode(raw_response)
-					if response.choices and response.choices[1] and response.choices[1].message and response.choices[1].message.content then
+					if
+						response.choices
+						and response.choices[1]
+						and response.choices[1].message
+						and response.choices[1].message.content
+					then
 						content = response.choices[1].message.content
 					end
 					if content and type(content) == "string" then
@@ -310,7 +319,6 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 						handler(qid, content)
 					end
 				end
-
 
 				if qt.response == "" then
 					logger.error(qt.provider .. " response is empty: \n" .. vim.inspect(qt.raw_response))
@@ -365,7 +373,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 			"-H",
 			"api-key: " .. bearer,
 		}
-	elseif provider == "googleai" then
+	elseif provider == "googleai" or provider == "googleai_free" then
 		headers = {}
 		endpoint = render.template_replace(endpoint, "{{secret}}", bearer)
 		endpoint = render.template_replace(endpoint, "{{model}}", payload.model)
@@ -392,8 +400,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback)
 		}
 	end
 
-	local temp_file = D.query_dir ..
-		"/" .. logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF)) .. ".json"
+	local temp_file = D.query_dir
+		.. "/"
+		.. logger.now()
+		.. "."
+		.. string.format("%x", math.random(0, 0xFFFFFF))
+		.. ".json"
 	helpers.table_to_file(payload, temp_file)
 
 	local curl_params = vim.deepcopy(D.config.curl_params or {})
@@ -508,7 +520,13 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor)
 			table.insert(unfinished_lines, lines[i])
 		end
 
-		vim.api.nvim_buf_set_lines(buf, first_line + finished_lines, first_line + finished_lines, false, unfinished_lines)
+		vim.api.nvim_buf_set_lines(
+			buf,
+			first_line + finished_lines,
+			first_line + finished_lines,
+			false,
+			unfinished_lines
+		)
 
 		local new_finished_lines = math.max(0, #lines - 1)
 		for i = finished_lines, new_finished_lines do
