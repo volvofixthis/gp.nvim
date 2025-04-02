@@ -853,16 +853,18 @@ M.cmd.ChatToggle = function(params, system_prompt, agent)
 	end
 
 	-- if the range is 2, we want to create a new chat file with the selection
+	local buf
 	if params.range ~= 2 then
 		local last = M._state.last_chat
 		if last and vim.fn.filereadable(last) == 1 then
 			last = vim.fn.resolve(last)
-			M.open_buf(last, M.resolve_buf_target(params), M._toggle_kind.chat, true)
-			return
+			buf = M.open_buf(last, M.resolve_buf_target(params), M._toggle_kind.chat, true)
 		end
+	else
+		buf = M.new_chat(params, true, system_prompt, agent)
 	end
 
-	M.new_chat(params, true, system_prompt, agent)
+	return buf
 end
 
 M.cmd.ChatPaste = function(params)
@@ -951,7 +953,9 @@ M.chat_respond = function(params)
 	local file_name = vim.api.nvim_buf_get_name(buf)
 	local reason = M.not_chat(buf, file_name)
 	if reason then
-		M.logger.warning("File " .. vim.inspect(file_name) .. " does not look like a chat file: " .. vim.inspect(reason))
+		M.logger.warning(
+			"File " .. vim.inspect(file_name) .. " does not look like a chat file: " .. vim.inspect(reason)
+		)
 		return
 	end
 
@@ -1068,11 +1072,22 @@ M.chat_respond = function(params)
 	-- strip whitespace from ends of content
 	for _, message in ipairs(messages) do
 		message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
+		message.content = require("gp.context").insert_contexts(message.content)
 	end
 
 	-- write assistant prompt
 	local last_content_line = M.helpers.last_content_line(buf)
-	vim.api.nvim_buf_set_lines(buf, last_content_line, last_content_line, false, { "", agent_prefix .. agent_suffix, "" })
+	vim.api.nvim_buf_set_lines(
+		buf,
+		last_content_line,
+		last_content_line,
+		false,
+		{ "", agent_prefix .. agent_suffix, "" }
+	)
+
+	-- insert requested context in the message the user just entered
+	-- messages[#messages].content = require("gp.context").insert_contexts(messages[#messages].content)
+	-- print(vim.inspect(messages[#messages]))
 
 	-- call the model and write response
 	M.dispatcher.query(
@@ -1121,7 +1136,11 @@ M.chat_respond = function(params)
 				M.dispatcher.query(
 					nil,
 					headers.provider or agent.provider,
-					M.dispatcher.prepare_payload(messages, headers.model or agent.model, headers.provider or agent.provider),
+					M.dispatcher.prepare_payload(
+						messages,
+						headers.model or agent.model,
+						headers.provider or agent.provider
+					),
 					topic_handler,
 					vim.schedule_wrap(function()
 						-- get topic from invisible buffer
